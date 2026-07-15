@@ -1,64 +1,51 @@
 "use client";
 
-import { useState, useActionState } from "react";
+import { useState, useActionState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { updatePage, logout } from "./actions";
-
-// ── types ─────────────────────────────────────────────────────────────
-
-interface AdminField {
-  name: string;
-  type: string;
-  value: string | number;
-}
-
-interface AdminPage {
-  pagePath: string;
-  label?: string;
-  fields: AdminField[];
-  children?: AdminPage[];
-}
+import type { AdminField, AdminPage } from "@/cocms/client";
+import type { ArrayItemSchema } from "@/cocms/types";
 
 // ── helpers ───────────────────────────────────────────────────────────
 
 function pageLabel(pagePath: string): string {
   if (pagePath === "/") return "Home";
-  // /about      → About
-  // /about/team → Team
+  if (pagePath === "/__site") return "Site Settings";
   const parts = pagePath.split("/").filter(Boolean);
   const last = parts[parts.length - 1];
   return last.charAt(0).toUpperCase() + last.slice(1);
 }
 
-/** Flatten nested page tree into ordered tab list with depth info */
 function flattenPages(
   pages: AdminPage[],
   depth = 0,
 ): (AdminPage & { depth: number })[] {
   const flat: (AdminPage & { depth: number })[] = [];
   for (const p of pages) {
-    flat.push({ ...p, label: pageLabel(p.pagePath), depth });
-    if (p.children) {
-      flat.push(...flattenPages(p.children, depth + 1));
+    flat.push({ ...p, label: pageLabel(p.pagePath), depth } as AdminPage & {
+      depth: number;
+    });
+    const children = (p as AdminPage & { children?: AdminPage[] }).children;
+    if (children) {
+      flat.push(...flattenPages(children, depth + 1));
     }
   }
   return flat;
 }
 
-/** Build a nested page tree from a flat list sorted by path. */
-function buildPageTree(pages: AdminPage[]): AdminPage[] {
-  const sorted = [...pages].sort((a, b) => a.pagePath.localeCompare(b.pagePath));
-  const tree: AdminPage[] = [];
+function buildPageTree(pages: AdminPage[]): (AdminPage & { children?: AdminPage[] })[] {
+  const sorted = [...pages].sort((a, b) =>
+    a.pagePath.localeCompare(b.pagePath),
+  );
+  const tree: (AdminPage & { children?: AdminPage[] })[] = [];
 
   for (const page of sorted) {
     const parts = page.pagePath.split("/").filter(Boolean);
     if (parts.length === 0) {
-      // root "/"
       tree.push(page);
       continue;
     }
 
-    // Find parent path
     const parentPath = "/" + parts.slice(0, -1).join("/");
     const parent = findPage(tree, parentPath);
 
@@ -73,7 +60,10 @@ function buildPageTree(pages: AdminPage[]): AdminPage[] {
   return tree;
 }
 
-function findPage(pages: AdminPage[], pagePath: string): AdminPage | null {
+function findPage(
+  pages: (AdminPage & { children?: AdminPage[] })[],
+  pagePath: string,
+): (AdminPage & { children?: AdminPage[] }) | null {
   for (const p of pages) {
     if (p.pagePath === pagePath) return p;
     if (p.children) {
@@ -84,7 +74,204 @@ function findPage(pages: AdminPage[], pagePath: string): AdminPage | null {
   return null;
 }
 
-// ── components ────────────────────────────────────────────────────────
+function fieldLabel(name: string): string {
+  return name.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()).trim();
+}
+
+/** Create a default value for a new array item based on the item schema. */
+function newItemDefault(schema: ArrayItemSchema): unknown {
+  if (schema.itemType === "string") return "";
+  if (schema.itemType === "number") return 0;
+  if (schema.itemType === "object") {
+    const obj: Record<string, unknown> = {};
+    for (const [key, fType] of Object.entries(schema.fields)) {
+      switch (fType) {
+        case "integer":
+        case "numeric":
+          obj[key] = 0;
+          break;
+        case "image":
+        case "file":
+        case "text":
+        default:
+          obj[key] = "";
+      }
+    }
+    return obj;
+  }
+  return "";
+}
+
+// ── Array Field Editor ────────────────────────────────────────────────
+
+function ArrayFieldEditor({
+  field,
+}: {
+  field: AdminField;
+}) {
+  const initial: unknown[] =
+    field.value && typeof field.value === "object" && Array.isArray(field.value)
+      ? (field.value as unknown[])
+      : [];
+
+  const [items, setItems] = useState<unknown[]>(initial);
+  const schema = field.fieldMeta;
+
+  const addItem = useCallback(() => {
+    if (!schema) return;
+    setItems((prev) => [...prev, newItemDefault(schema)]);
+  }, [schema]);
+
+  const removeItem = useCallback((index: number) => {
+    setItems((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const updateItem = useCallback((index: number, newValue: unknown) => {
+    setItems((prev) => {
+      const next = [...prev];
+      next[index] = newValue;
+      return next;
+    });
+  }, []);
+
+  const updateObjectField = useCallback(
+    (itemIndex: number, fieldKey: string, newVal: unknown) => {
+      setItems((prev) => {
+        const next = [...prev];
+        const obj = { ...(next[itemIndex] as Record<string, unknown>) };
+        obj[fieldKey] = newVal;
+        next[itemIndex] = obj;
+        return next;
+      });
+    },
+    [],
+  );
+
+  if (!schema) {
+    return (
+      <p className="text-sm text-amber-600">
+        Array schema metadata missing — please restart the server to re-sync.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Hidden input carries the JSON to the server action */}
+      <input type="hidden" name={`${field.name}_json`} value={JSON.stringify(items)} />
+
+      {items.length === 0 && (
+        <p className="text-sm text-slate-400 italic">No items yet.</p>
+      )}
+
+      {items.map((item, idx) => (
+        <div
+          key={idx}
+          className="relative rounded-lg border border-slate-200 bg-slate-50 p-4"
+        >
+          {/* Remove button */}
+          <button
+            type="button"
+            onClick={() => removeItem(idx)}
+            className="absolute right-3 top-3 rounded-md p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
+            title="Remove item"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+
+          {/* ── Primitive array (string / number) ── */}
+          {schema.itemType === "string" && (
+            <input
+              type="text"
+              value={item as string}
+              onChange={(e) => updateItem(idx, e.target.value)}
+              className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            />
+          )}
+
+          {schema.itemType === "number" && (
+            <input
+              type="number"
+              value={item as number}
+              onChange={(e) => updateItem(idx, Number(e.target.value))}
+              className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            />
+          )}
+
+          {/* ── Object array ── */}
+          {schema.itemType === "object" && (
+            <div className="space-y-3 pr-6">
+              {Object.entries(schema.fields).map(([fKey, fType]) => {
+                const val = (item as Record<string, unknown>)[fKey] ?? "";
+                return (
+                  <div key={fKey}>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">
+                      {fieldLabel(fKey)}
+                    </label>
+                    {fType === "text" && (
+                      <input
+                        type="text"
+                        value={val as string}
+                        onChange={(e) => updateObjectField(idx, fKey, e.target.value)}
+                        className="block w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-900 shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      />
+                    )}
+                    {(fType === "integer" || fType === "numeric") && (
+                      <input
+                        type="number"
+                        value={val as number}
+                        onChange={(e) =>
+                          updateObjectField(idx, fKey, Number(e.target.value))
+                        }
+                        className="block w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-900 shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      />
+                    )}
+                    {(fType === "image" || fType === "file") && (
+                      <div className="space-y-1">
+                        {fType === "image" && val && (
+                          <img
+                            src={String(val)}
+                            alt={fKey}
+                            className="h-16 w-16 rounded-md border border-slate-200 object-cover"
+                          />
+                        )}
+                        <input
+                          type="text"
+                          value={val as string}
+                          onChange={(e) =>
+                            updateObjectField(idx, fKey, e.target.value)
+                          }
+                          placeholder={fType === "image" ? "Image URL" : "File URL"}
+                          className="block w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-900 shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {/* Add item button */}
+      <button
+        type="button"
+        onClick={addItem}
+        className="inline-flex items-center gap-x-1.5 rounded-lg border-2 border-dashed border-slate-300 px-4 py-2 text-sm font-medium text-slate-500 transition-colors hover:border-indigo-400 hover:text-indigo-600"
+      >
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+        </svg>
+        Add Item
+      </button>
+    </div>
+  );
+}
+
+// ── Page Edit Form ────────────────────────────────────────────────────
 
 function PageEditForm({
   page,
@@ -106,16 +293,23 @@ function PageEditForm({
     <form action={formAction} className="space-y-6">
       {page.fields.map((field) => (
         <div key={field.name}>
-          <label className="mb-1.5 block text-sm font-medium capitalize text-slate-600">
-            {field.name.replace(/([A-Z])/g, " $1").trim()}
+          <label className="mb-1.5 block text-sm font-medium text-slate-600">
+            {fieldLabel(field.name)}
           </label>
+
+          {/* Array field */}
+          {field.type === "array" && <ArrayFieldEditor field={field} />}
 
           {/* Text input */}
           {field.type === "text" && (
             <textarea
               name={field.name}
               defaultValue={String(field.value ?? "")}
-              rows={field.name === "bio" || field.name.includes("Subtitle") ? 3 : 1}
+              rows={
+                field.name === "bio" || String(field.value ?? "").length > 60
+                  ? 3
+                  : 1
+              }
               className="block w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm text-slate-900 shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
             />
           )}
@@ -125,7 +319,7 @@ function PageEditForm({
             <input
               name={field.name}
               type="number"
-              defaultValue={field.value}
+              defaultValue={field.value as number}
               className="block w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm text-slate-900 shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
             />
           )}
@@ -209,7 +403,7 @@ function PageEditForm({
   );
 }
 
-// ── main panel ────────────────────────────────────────────────────────
+// ── Main Panel ────────────────────────────────────────────────────────
 
 export default function AdminPanel({ pages }: { pages: AdminPage[] }) {
   const router = useRouter();
@@ -236,9 +430,7 @@ export default function AdminPanel({ pages }: { pages: AdminPage[] }) {
               }`}
               style={{ paddingLeft: `${12 + tab.depth * 16}px` }}
             >
-              {tab.depth > 0 && (
-                <span className="mr-1 text-slate-300">└</span>
-              )}
+              {tab.depth > 0 && <span className="mr-1 text-slate-300">└</span>}
               {tab.label}
             </button>
           ))}
@@ -261,9 +453,7 @@ export default function AdminPanel({ pages }: { pages: AdminPage[] }) {
         <div className="mx-auto max-w-2xl">
           <div className="mb-8">
             <h2 className="text-xl font-bold text-slate-900">
-              {activePage
-                ? pageLabel(activePage.pagePath)
-                : "Select a page"}
+              {activePage ? pageLabel(activePage.pagePath) : "Select a page"}
             </h2>
             {activePage && (
               <p className="mt-1 text-sm text-slate-500">
@@ -286,7 +476,7 @@ export default function AdminPanel({ pages }: { pages: AdminPage[] }) {
           {!activePage && (
             <p className="text-sm text-slate-400">
               No pages registered yet. Create a schema file in{" "}
-              <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-mono text-slate-700">
+              <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-700">
                 src/cocms/
               </code>{" "}
               and restart the server.

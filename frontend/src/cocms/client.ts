@@ -1,25 +1,23 @@
 import pool from "./db";
-import type { PageSchema, ResolvedContent } from "./types";
+import type { PageSchema, ResolvedContent, ArrayItemSchema } from "./types";
 
 // ── helpers ──────────────────────────────────────────────────────────
 
-function getTableName(pagePath: string): string {
+export function getTableName(pagePath: string): string {
   if (pagePath === "/") return "cocms_home";
-  // /about     → cocms_about
-  // /about/team → cocms_about_team
   return "cocms" + pagePath.replace(/\//g, "_");
 }
 
-function getDefaultValue(value: unknown): string | number {
+export function getDefaultValue(value: unknown): unknown {
   if (typeof value === "string" || typeof value === "number") return value;
   if (value && typeof value === "object" && "defaultValue" in value) {
-    return (value as { defaultValue: string }).defaultValue;
+    return (value as { defaultValue: unknown }).defaultValue;
   }
   return "";
 }
 
-function extractDefaults(schema: PageSchema): Record<string, string | number> {
-  const content: Record<string, string | number> = {};
+function extractDefaults(schema: PageSchema): Record<string, unknown> {
+  const content: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(schema)) {
     if (key === "pagePath") continue;
     content[key] = getDefaultValue(value);
@@ -50,10 +48,11 @@ export async function getContent<T extends PageSchema>(
     }
 
     const row = result.rows[0];
-    const content: Record<string, string | number> = {};
+    const content: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(schema)) {
       if (key === "pagePath") continue;
+      // JSONB columns are auto-parsed by pg; NULL falls back to schema default
       content[key] = row[key] ?? getDefaultValue(value);
     }
 
@@ -64,33 +63,41 @@ export async function getContent<T extends PageSchema>(
   }
 }
 
+/** Field metadata returned to the admin panel. */
+export interface AdminField {
+  name: string;
+  type: string;
+  value: unknown;
+  fieldMeta: ArrayItemSchema | null;
+}
+
+/** Page data returned to the admin panel. */
+export interface AdminPage {
+  pagePath: string;
+  fields: AdminField[];
+}
+
 /**
  * Query all registered pages and their field metadata from the registry.
  * Used by the admin panel to build tab navigation and edit forms.
  */
-export async function getAllPages(): Promise<
-  {
-    pagePath: string;
-    fields: { name: string; type: string; value: string | number }[];
-  }[]
-> {
+export async function getAllPages(): Promise<AdminPage[]> {
   try {
-    // Get all distinct page paths
     const pathsResult = await pool.query(
       `SELECT DISTINCT page_path FROM cocms_fields ORDER BY page_path`,
     );
 
-    const pages: {
-      pagePath: string;
-      fields: { name: string; type: string; value: string | number }[];
-    }[] = [];
+    const pages: AdminPage[] = [];
 
     for (const { page_path } of pathsResult.rows) {
       const tableName = getTableName(page_path);
 
-      // Get field metadata
+      // Get field metadata (including field_meta for arrays)
       const fieldsResult = await pool.query(
-        `SELECT field_name, field_type FROM cocms_fields WHERE page_path = $1 ORDER BY field_name`,
+        `SELECT field_name, field_type, field_meta
+         FROM cocms_fields
+         WHERE page_path = $1
+         ORDER BY field_name`,
         [page_path],
       );
 
@@ -106,11 +113,16 @@ export async function getAllPages(): Promise<
         // Table might not exist yet
       }
 
-      const fields = fieldsResult.rows.map(
-        (f: { field_name: string; field_type: string }) => ({
+      const fields: AdminField[] = fieldsResult.rows.map(
+        (f: {
+          field_name: string;
+          field_type: string;
+          field_meta: unknown;
+        }) => ({
           name: f.field_name,
           type: f.field_type,
-          value: (row[f.field_name] as string | number) ?? "",
+          value: row[f.field_name] ?? "",
+          fieldMeta: (f.field_meta as ArrayItemSchema) ?? null,
         }),
       );
 
@@ -122,6 +134,3 @@ export async function getAllPages(): Promise<
     return [];
   }
 }
-
-/** Re-export for use in sync */
-export { getTableName, getDefaultValue };

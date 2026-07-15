@@ -1,4 +1,4 @@
-import type { ImageField, FileField } from "./types";
+import type { ImageField, FileField, ArrayField } from "./types";
 
 /**
  * Declare an image field.
@@ -16,4 +16,18 @@ export function image(defaultValue: string): ImageField {
  */
 export function file(defaultValue: string): FileField {
   return { type: "file", defaultValue };
+}
+
+/**
+ * Declare an array field (list of strings, numbers, or objects).
+ * Stored as JSONB in the DB; the admin panel renders a dynamic
+ * list editor with add/remove buttons.
+ *
+ * Item shape is inferred from the first element of the default value:
+ * - `["a", "b"]` → array of strings
+ * - `[1, 2]`     → array of numbers
+ * - `[{...}]`    → array of objects (field types inferred from values)
+ */
+export function array(defaultValue: unknown[]): ArrayField {
+  return { type: "array", defaultValue };
 }

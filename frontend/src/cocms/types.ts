@@ -10,8 +10,19 @@ export interface FileField {
   defaultValue: string;
 }
 
+/** A field declared as an array — stored as JSONB in the DB. */
+export interface ArrayField {
+  type: "array";
+  defaultValue: unknown[];
+}
+
 /** Possible values a schema field can hold. */
-export type FieldDeclaration = string | number | ImageField | FileField;
+export type FieldDeclaration =
+  | string
+  | number
+  | ImageField
+  | FileField
+  | ArrayField;
 
 /**
  * The shape of every CoCMS schema file.
@@ -28,5 +39,20 @@ export type ResolvedContent<T extends PageSchema> = {
     ? string
     : T[K] extends FileField
       ? string
-      : T[K];
+      : T[K] extends ArrayField
+        ? unknown[]
+        : T[K];
 };
+
+/** Shape metadata for an array-of-objects field. */
+export interface ArrayItemObjectSchema {
+  itemType: "object";
+  fields: Record<string, string>;
+}
+
+/** Shape metadata for an array-of-primitives field. */
+export interface ArrayItemPrimitiveSchema {
+  itemType: "string" | "number";
+}
+
+export type ArrayItemSchema = ArrayItemObjectSchema | ArrayItemPrimitiveSchema;

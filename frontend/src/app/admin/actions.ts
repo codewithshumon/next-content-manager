@@ -6,8 +6,9 @@ import { redirect } from "next/navigation";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import pool from "@/cocms/db";
+import type { AdminField } from "@/cocms/client";
 
-// ── table-name helper (mirrors sync/client) ──────────────────────────
+// ── table-name helper ────────────────────────────────────────────────
 
 function getTableName(pagePath: string): string {
   if (pagePath === "/") return "cocms_home";
@@ -32,7 +33,7 @@ export async function login(
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 60 * 60 * 24, // 24 hours
+      maxAge: 60 * 60 * 24,
     });
     redirect("/admin");
   }
@@ -50,74 +51,73 @@ export async function logout(): Promise<void> {
 
 export async function updatePage(
   pagePath: string,
-  fields: { name: string; type: string }[],
+  fields: AdminField[],
   _prevState: { success?: boolean; error?: string } | null,
   formData: FormData,
 ): Promise<{ success?: boolean; error?: string }> {
   try {
     const tableName = getTableName(pagePath);
-    const updates: Record<string, string | number> = {};
-    const columns: string[] = [];
-    const values: (string | number)[] = [];
+    const setClauses: string[] = [];
+    const queryValues: unknown[] = [];
     let paramIndex = 1;
 
     for (const field of fields) {
-      const rawValue = formData.get(field.name);
+      // ── array field — read JSON from hidden input ──
+      if (field.type === "array") {
+        const jsonStr = formData.get(`${field.name}_json`) as string;
+        if (jsonStr !== null) {
+          const parsed = JSON.parse(jsonStr);
+          setClauses.push(`"${field.name}" = $${paramIndex++}::jsonb`);
+          queryValues.push(JSON.stringify(parsed));
+        }
+        continue;
+      }
 
-      // Handle file upload
+      // ── image / file fields ──
       if (field.type === "image" || field.type === "file") {
+        const rawValue = formData.get(field.name);
+
+        // File upload
         const file = rawValue as File | null;
         if (file && file.size > 0) {
-          // Save uploaded file to /public/uploads/
           const uploadsDir = join(process.cwd(), "public", "uploads");
           await mkdir(uploadsDir, { recursive: true });
 
-          const ext = file.name.split(".").pop() || "";
           const filename = `${Date.now()}-${file.name}`;
           const filePath = join(uploadsDir, filename);
 
           const bytes = await file.arrayBuffer();
           await writeFile(filePath, Buffer.from(bytes));
 
-          columns.push(`"${field.name}"`);
-          values.push(`/uploads/${filename}`);
+          setClauses.push(`"${field.name}" = $${paramIndex++}`);
+          queryValues.push(`/uploads/${filename}`);
           continue;
         }
 
-        // URL/path paste (comes as a second field with _url suffix)
+        // URL/path paste
         const urlValue = formData.get(`${field.name}_url`) as string;
         if (urlValue) {
-          columns.push(`"${field.name}"`);
-          values.push(urlValue);
+          setClauses.push(`"${field.name}" = $${paramIndex++}`);
+          queryValues.push(urlValue);
           continue;
         }
 
-        // No change — skip this field
-        continue;
+        continue; // no change
       }
 
-      // Text / number fields
-      columns.push(`"${field.name}"`);
+      // ── text / number fields ──
+      const rawValue = formData.get(field.name);
+      setClauses.push(`"${field.name}" = $${paramIndex++}`);
       if (field.type === "integer" || field.type === "numeric") {
-        values.push(Number(rawValue) || 0);
+        queryValues.push(Number(rawValue) || 0);
       } else {
-        values.push(String(rawValue ?? ""));
+        queryValues.push(String(rawValue ?? ""));
       }
     }
 
-    if (columns.length === 0) {
+    if (setClauses.length === 0) {
       return { success: true };
     }
-
-    // Build UPDATE query
-    const setClauses = columns.map((col, i) => {
-      const val = values[i];
-      if (typeof val === "number") return `${col} = ${val}`;
-      return `${col} = $${paramIndex++}`;
-    });
-
-    const queryValues = values.filter((v) => typeof v !== "number");
-    const numParts = values.filter((v) => typeof v === "number");
 
     const updateQuery = `
       UPDATE ${tableName}

@@ -1,5 +1,5 @@
 import pool from "./db";
-import type { PageSchema } from "./types";
+import type { PageSchema, ArrayItemSchema } from "./types";
 
 // ── helpers ──────────────────────────────────────────────────────────
 
@@ -8,13 +8,13 @@ function getTableName(pagePath: string): string {
   return "cocms" + pagePath.replace(/\//g, "_");
 }
 
-function getFieldType(value: unknown): string {
+export function getFieldType(value: unknown): string {
   if (typeof value === "string") return "text";
   if (typeof value === "number") {
     return Number.isInteger(value) ? "integer" : "numeric";
   }
   if (value && typeof value === "object" && "type" in value) {
-    return (value as { type: string }).type; // "image" | "file"
+    return (value as { type: string }).type; // "image" | "file" | "array"
   }
   return "text";
 }
@@ -25,6 +25,8 @@ function getColumnType(fieldType: string): string {
       return "INTEGER";
     case "numeric":
       return "NUMERIC";
+    case "array":
+      return "JSONB";
     case "image":
     case "file":
     case "text":
@@ -33,12 +35,28 @@ function getColumnType(fieldType: string): string {
   }
 }
 
-function getDefaultValue(value: unknown): string | number {
+export function getDefaultValue(value: unknown): unknown {
   if (typeof value === "string" || typeof value === "number") return value;
   if (value && typeof value === "object" && "defaultValue" in value) {
-    return (value as { defaultValue: string }).defaultValue;
+    return (value as { defaultValue: unknown }).defaultValue;
   }
   return "";
+}
+
+/** Infer the item schema for an array field from its default value. */
+export function inferItemSchema(defaultValue: unknown[]): ArrayItemSchema {
+  if (defaultValue.length === 0) return { itemType: "string" };
+  const first = defaultValue[0];
+  if (typeof first === "string") return { itemType: "string" };
+  if (typeof first === "number") return { itemType: "number" };
+  if (typeof first === "object" && first !== null) {
+    const fields: Record<string, string> = {};
+    for (const [key, val] of Object.entries(first)) {
+      fields[key] = getFieldType(val);
+    }
+    return { itemType: "object", fields };
+  }
+  return { itemType: "string" };
 }
 
 // ── public API ───────────────────────────────────────────────────────
@@ -49,14 +67,14 @@ function getDefaultValue(value: unknown): string | number {
  * For every schema file passed in:
  * 1. Creates the per-page table if it doesn't exist.
  * 2. Adds any missing columns (never drops — data safety).
- * 3. Upserts field metadata into `cocms_fields` registry.
+ * 3. Upserts field metadata into `cocms_fields` registry (incl. array item schema).
  * 4. Inserts a default row if one doesn't already exist.
  *
  * Failures for one schema are isolated — they do not prevent
  * other schemas from syncing.
  */
 export async function syncSchemas(schemas: PageSchema[]): Promise<void> {
-  // Ensure the registry table exists
+  // Ensure the registry table exists (with optional field_meta column)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS cocms_fields (
       page_path  TEXT NOT NULL,
@@ -64,6 +82,12 @@ export async function syncSchemas(schemas: PageSchema[]): Promise<void> {
       field_type TEXT NOT NULL,
       PRIMARY KEY (page_path, field_name)
     )
+  `);
+
+  // Add field_meta column if it doesn't exist yet
+  await pool.query(`
+    ALTER TABLE cocms_fields
+    ADD COLUMN IF NOT EXISTS field_meta JSONB
   `);
 
   for (const schema of schemas) {
@@ -91,19 +115,30 @@ export async function syncSchemas(schemas: PageSchema[]): Promise<void> {
           ADD COLUMN IF NOT EXISTS "${col}" ${columnType}
         `);
 
-        // 3. Upsert registry row
+        // Build field_meta for array fields
+        let fieldMeta: unknown = null;
+        if (fieldType === "array") {
+          const arrVal = schema[col] as { defaultValue: unknown[] };
+          fieldMeta = inferItemSchema(arrVal.defaultValue);
+        }
+
+        // 3. Upsert registry row (with field_meta)
         await pool.query(
-          `INSERT INTO cocms_fields (page_path, field_name, field_type)
-           VALUES ($1, $2, $3)
+          `INSERT INTO cocms_fields (page_path, field_name, field_type, field_meta)
+           VALUES ($1, $2, $3, $4)
            ON CONFLICT (page_path, field_name)
-           DO UPDATE SET field_type = $3`,
-          [schema.pagePath, col, fieldType],
+           DO UPDATE SET field_type = $3, field_meta = $4`,
+          [schema.pagePath, col, fieldType, fieldMeta ? JSON.stringify(fieldMeta) : null],
         );
       }
 
       // 4. Insert default row if no row exists for this pagePath
       const placeholders = columns.map((_, i) => `$${i + 2}`);
-      const values = columns.map((col) => getDefaultValue(schema[col]));
+      const values = columns.map((col) => {
+        const def = getDefaultValue(schema[col]);
+        // For JSONB arrays, pg expects a JS array, not a string
+        return def;
+      });
 
       await pool.query(
         `INSERT INTO ${tableName} (page_path, ${columns.map((c) => `"${c}"`).join(", ")})
