@@ -1,5 +1,5 @@
 # User Requirements Document (URD)
-## Project: NextCMS Demo Website
+## Project: CoCMS Demo Website
 
 **Version:** 1.0
 **Date:** July 2026
@@ -9,7 +9,7 @@
 
 ## 1. Purpose
 
-This document describes what each type of user needs to be able to do with the NextCMS demo website, from their point of view — independent of how it's implemented. It complements the BRD (business rationale) and feeds into the SRS (technical spec).
+This document describes what each type of user needs to be able to do with the CoCMS demo website, from their point of view — independent of how it's implemented. It complements the BRD (business rationale) and feeds into the SRS (technical spec).
 
 ## 2. User Roles
 
@@ -49,9 +49,9 @@ This document describes what each type of user needs to be able to do with the N
 ## 4. Key Use Case Scenarios
 
 ### UC-1: Developer adds a new page
-1. Developer creates `app/services/page.tsx` and `nextcms/services-page.ts` declaring fields (e.g. `title`, `description`, `icon: image(...)`).
+1. Developer creates `app/services/page.tsx` and `cocms/services-page.ts` declaring fields (e.g. `title`, `description`, `icon: image(...)`).
 2. Developer restarts the dev server (or deploys).
-3. NextCMS sync creates the `nextcms_services` table and registers its fields.
+3. CoCMS sync creates the `cocms_services` table and registers its fields.
 4. A "Services" tab appears in `/admin` automatically, pre-filled with the schema's default values.
 
 ### UC-2: Admin edits existing content
@@ -62,7 +62,7 @@ This document describes what each type of user needs to be able to do with the N
 5. The live `/about/team` page reflects both changes immediately.
 
 ### UC-3: Developer removes a field
-1. Developer deletes the `age` field from `nextcms/home-page.ts`.
+1. Developer deletes the `age` field from `cocms/home-page.ts`.
 2. On next server start, sync detects `age` is no longer declared.
 3. The admin panel stops showing `age` as an editable field. The underlying database column and its data are left untouched (not deleted).
 

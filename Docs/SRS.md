@@ -1,5 +1,5 @@
 # Software Requirements Specification (SRS)
-## Project: NextCMS Demo Website
+## Project: CoCMS Demo Website
 
 **Version:** 1.0
 **Date:** July 2026
@@ -10,7 +10,7 @@
 ## 1. Introduction
 
 ### 1.1 Purpose
-Defines the technical requirements for the NextCMS engine and the demo website built on it, translating the BRD/URD into implementable specifications.
+Defines the technical requirements for the CoCMS engine and the demo website built on it, translating the BRD/URD into implementable specifications.
 
 ### 1.2 Scope
 Covers: schema file format, sync-to-database mechanism, data access layer, admin panel, and the public-facing demo site. Excludes packaging as an npm module (Phase 2).
@@ -19,16 +19,16 @@ Covers: schema file format, sync-to-database mechanism, data access layer, admin
 
 | Term | Meaning |
 |---|---|
-| Schema file | A `.ts` file under `nextcms/` declaring a page's editable fields and defaults |
+| Schema file | A `.ts` file under `cocms/` declaring a page's editable fields and defaults |
 | pagePath | Unique route path a schema file corresponds to (e.g. `/about/team`) |
 | Field | A single editable value (text, number, image, or file) declared in a schema file |
 | Sync | The startup process that creates/updates DB tables from schema files |
-| nextcms_fields | Internal registry table storing field type metadata |
+| cocms_fields | Internal registry table storing field type metadata |
 
 ## 2. Overall Description
 
 ### 2.1 Product Perspective
-NextCMS is embedded directly inside the Next.js app (not a separate service). It consists of:
+CoCMS is embedded directly inside the Next.js app (not a separate service). It consists of:
 - A **sync module**, run once at server boot via `instrumentation.ts`.
 - A **data access layer** (`getContent`, `updatePage`) used by pages and the admin panel.
 - An **admin UI** at `/admin`, generated from schema/registry data.
@@ -52,9 +52,9 @@ See URD §2 (Developer, Content Admin, Site Visitor).
 │  app/about/page.tsx          │──uses──▶ getContent(schema)
 │  app/about/team/page.tsx     │──uses──▶ getContent(schema)
 │                              │
-│  nextcms/home-page.ts        │
-│  nextcms/about-page.ts       │◀── read at boot by sync
-│  nextcms/about-team-page.ts  │
+│  cocms/home-page.ts        │
+│  cocms/about-page.ts       │◀── read at boot by sync
+│  cocms/about-team-page.ts  │
 │                              │
 │  app/admin/...                │──uses──▶ getFields(), updatePage()
 │                              │
@@ -65,10 +65,10 @@ See URD §2 (Developer, Content Admin, Site Visitor).
         ┌──────────────┐
         │  PostgreSQL   │
         │               │
-        │ nextcms_fields          (registry: field types per page)
-        │ nextcms_home            (1 row: pagePath + field columns)
-        │ nextcms_about
-        │ nextcms_about_team
+        │ cocms_fields          (registry: field types per page)
+        │ cocms_home            (1 row: pagePath + field columns)
+        │ cocms_about
+        │ cocms_about_team
         └──────────────┘
 ```
 
@@ -81,11 +81,11 @@ See URD §2 (Developer, Content Admin, Site Visitor).
 
 ### FR-2 — Sync on Boot
 - `instrumentation.ts` MUST call `syncSchemas()` exactly once when the Next.js server starts (dev and prod).
-- For each schema file found under `nextcms/`:
-  - Compute table name via `nextcms_` + `pagePath` sanitized (`/` → `_`, leading/trailing slashes stripped, `/` → `home` for root).
+- For each schema file found under `cocms/`:
+  - Compute table name via `cocms_` + `pagePath` sanitized (`/` → `_`, leading/trailing slashes stripped, `/` → `home` for root).
   - If table does not exist: `CREATE TABLE` with `id SERIAL PRIMARY KEY`, `page_path TEXT UNIQUE NOT NULL`, one column per field (type-mapped per FR-4), `updated_at TIMESTAMPTZ DEFAULT now()`; insert one row with schema defaults.
   - If table exists: for each field in the schema not present as a column, `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. Never drop columns automatically.
-  - Upsert corresponding rows into `nextcms_fields` (pagePath, fieldName, fieldType).
+  - Upsert corresponding rows into `cocms_fields` (pagePath, fieldName, fieldType).
 
 ### FR-3 — Content Read (Public Pages)
 - `getContent(schema)` MUST query the row matching `page_path` from the schema's table and return field values as a typed object.
@@ -102,7 +102,7 @@ See URD §2 (Developer, Content Admin, Site Visitor).
 | `file(default)` | `TEXT` (stores path/URL) | file name/link + URL field + file upload button |
 
 ### FR-5 — Admin Panel Navigation
-- `/admin` MUST list all known `pagePath`s from `nextcms_fields`, grouped into tabs mirroring path hierarchy (e.g. `/about` and `/about/team` render as a parent "About" tab with a "Team" sub-tab).
+- `/admin` MUST list all known `pagePath`s from `cocms_fields`, grouped into tabs mirroring path hierarchy (e.g. `/about` and `/about/team` render as a parent "About" tab with a "Team" sub-tab).
 - Root path `/` MUST render as the first tab (e.g. labeled "Home").
 - Selecting a tab MUST display a form with one input per field registered for that `pagePath`, pre-filled with current DB values.
 
@@ -130,7 +130,7 @@ See URD §2 (Developer, Content Admin, Site Visitor).
 
 ## 6. Data Model
 
-### 6.1 `nextcms_fields` (registry)
+### 6.1 `cocms_fields` (registry)
 | Column | Type |
 |---|---|
 | page_path | TEXT |
@@ -138,7 +138,7 @@ See URD §2 (Developer, Content Admin, Site Visitor).
 | field_type | TEXT (`text`\|`number`\|`image`\|`file`) |
 | Primary key | (page_path, field_name) |
 
-### 6.2 Per-page table, e.g. `nextcms_home`
+### 6.2 Per-page table, e.g. `cocms_home`
 | Column | Type |
 |---|---|
 | id | SERIAL PRIMARY KEY |
@@ -149,15 +149,15 @@ See URD §2 (Developer, Content Admin, Site Visitor).
 
 ## 7. External Interfaces
 
-- **Environment:** `DATABASE_URL` (required), `NEXTCMS_ADMIN_USER` / `NEXTCMS_ADMIN_PASSWORD` (demo auth).
-- **Filesystem:** `nextcms/*.ts` (input, read at boot), `public/uploads/*` (output, written on file upload).
+- **Environment:** `DATABASE_URL` (required), `COCMS_ADMIN_USER` / `COCMS_ADMIN_PASSWORD` (demo auth).
+- **Filesystem:** `cocms/*.ts` (input, read at boot), `public/uploads/*` (output, written on file upload).
 - **Server Actions:** `updatePage(pagePath, values)` — the only write path into content tables.
 
 ## 8. Appendix — Example Files
 
-**`nextcms/home-page.ts`**
+**`cocms/home-page.ts`**
 ```ts
-import { image } from '@/nextcms/fields'
+import { image } from '@/cocms/fields'
 
 export default {
   pagePath: '/',
@@ -169,8 +169,8 @@ export default {
 
 **`app/page.tsx`**
 ```tsx
-import { getContent } from '@/nextcms/client'
-import schema from '@/nextcms/home-page'
+import { getContent } from '@/cocms/client'
+import schema from '@/cocms/home-page'
 
 export default async function HomePage() {
   const { name, age, avatar } = await getContent(schema)

@@ -1,5 +1,5 @@
 # Business Requirements Document (BRD)
-## Project: NextCMS Demo Website
+## Project: CoCMS Demo Website
 
 **Version:** 1.0
 **Date:** July 2026
@@ -9,13 +9,13 @@
 
 ## 1. Project Overview
 
-NextCMS is a lightweight content-editing layer for Next.js applications. It lets a non-technical admin edit the **content** of a page (text, numbers, images, files) without ever touching code, while the **structure and design** of every page remains fully controlled by the developer in the codebase.
+CoCMS (Co-located CMS) is a lightweight content-editing layer for Next.js applications. It lets a non-technical admin edit the **content** of a page (text, numbers, images, files) without ever touching code, while the **structure and design** of every page remains fully controlled by the developer in the codebase.
 
-This document covers the first phase of the project: building a real, working **demo website** on top of the NextCMS pattern. The demo serves two purposes — proving the pattern works end-to-end, and acting as the reference implementation before NextCMS is published as an open-source package.
+This document covers the first phase of the project: building a real, working **demo website** on top of the CoCMS pattern. The demo serves two purposes — proving the pattern works end-to-end, and acting as the reference implementation before CoCMS is published as an open-source package.
 
 ## 2. Business Objective
 
-- Validate the NextCMS pattern (schema file → database table → admin form → live page) on a real, multi-page site before investing in a packaged open-source release.
+- Validate the CoCMS pattern (schema file → database table → admin form → live page) on a real, multi-page site before investing in a packaged open-source release.
 - Produce a working reference project that later becomes the basis for documentation and starter templates for the open-source release.
 - Keep the admin surface intentionally restrictive (edit-only, no structural changes) as the core value proposition, and prove that restriction holds up in practice.
 
@@ -32,8 +32,8 @@ There is no simple, developer-native middle ground: *"let an admin change values
 
 A demo Next.js website where:
 
-1. Each page has a co-located schema file (e.g. `nextcms/home-page.ts`) declaring its editable fields and default values.
-2. On server start, NextCMS automatically creates/updates one Postgres table per page from that schema (no manual migrations).
+1. Each page has a co-located schema file (e.g. `cocms/home-page.ts`) declaring its editable fields and default values.
+2. On server start, CoCMS automatically creates/updates one Postgres table per page from that schema (no manual migrations).
 3. The page component reads current values from the database at request time and renders them.
 4. An `/admin` panel, auto-generated from the same schemas, lets an admin edit field values per page — grouped into tabs that mirror the site's page structure — and nothing else.
 5. Saving an edit updates the database and revalidates the live page immediately.
@@ -41,7 +41,7 @@ A demo Next.js website where:
 ## 5. Scope
 
 ### In scope (Phase 1 — Demo Website)
-- A real multi-page Next.js site (e.g. a small business/portfolio site: Home, About, About/Team, Services, Contact) built using the NextCMS pattern.
+- A real multi-page Next.js site (e.g. a small business/portfolio site: Home, About, About/Team, Services, Contact) built using the CoCMS pattern.
 - Automatic table creation/sync from schema files via `instrumentation.ts`.
 - Field types: text, number, image, file.
 - Admin panel with tabbed navigation mirroring page hierarchy, edit-only forms.
@@ -86,6 +86,6 @@ A demo Next.js website where:
 
 ## 10. Phased Timeline
 
-1. **Phase 1 (this document's scope):** Build the demo website + core NextCMS engine (sync, data access, admin UI) inside the same repo.
+1. **Phase 1 (this document's scope):** Build the demo website + core CoCMS engine (sync, data access, admin UI) inside the same repo.
 2. **Phase 2:** Extract the engine into a standalone npm package; write install docs; open-source release.
 3. **Phase 3 (future):** Multi-DB support, cloud storage, role-based admin access — driven by real adopter feedback.
