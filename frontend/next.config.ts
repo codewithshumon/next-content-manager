@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Enable the instrumentation hook for CoCMS auto-sync on boot
+  experimental: {
+    instrumentationHook: true,
+  },
 };
 
 export default nextConfig;
