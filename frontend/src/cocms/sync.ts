@@ -133,18 +133,29 @@ export async function syncSchemas(schemas: PageSchema[]): Promise<void> {
       }
 
       // 4. Insert default row if no row exists for this pagePath
-      const placeholders = columns.map((_, i) => `$${i + 2}`);
-      const values = columns.map((col) => {
+      const insertParts: string[] = [];
+      const insertValues: unknown[] = [schema.pagePath];
+      let insertIdx = 2;
+
+      for (const col of columns) {
+        const fieldType = getFieldType(schema[col]);
         const def = getDefaultValue(schema[col]);
-        // For JSONB arrays, pg expects a JS array, not a string
-        return def;
-      });
+
+        if (fieldType === "array") {
+          // pg mishandles JS arrays for JSONB — stringify explicitly
+          insertParts.push(`$${insertIdx++}::jsonb`);
+          insertValues.push(JSON.stringify(def));
+        } else {
+          insertParts.push(`$${insertIdx++}`);
+          insertValues.push(def);
+        }
+      }
 
       await pool.query(
         `INSERT INTO ${tableName} (page_path, ${columns.map((c) => `"${c}"`).join(", ")})
-         VALUES ($1, ${placeholders.join(", ")})
+         VALUES ($1, ${insertParts.join(", ")})
          ON CONFLICT (page_path) DO NOTHING`,
-        [schema.pagePath, ...values],
+        insertValues,
       );
 
       console.log(`[CoCMS] ✓ Synced: ${schema.pagePath} → ${tableName}`);
