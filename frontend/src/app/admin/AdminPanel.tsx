@@ -16,15 +16,18 @@ function pageLabel(pagePath: string): string {
   return last.charAt(0).toUpperCase() + last.slice(1);
 }
 
+interface FlatTab extends AdminPage {
+  depth: number;
+  label: string;
+}
+
 function flattenPages(
   pages: AdminPage[],
   depth = 0,
-): (AdminPage & { depth: number })[] {
-  const flat: (AdminPage & { depth: number })[] = [];
+): FlatTab[] {
+  const flat: FlatTab[] = [];
   for (const p of pages) {
-    flat.push({ ...p, label: pageLabel(p.pagePath), depth } as AdminPage & {
-      depth: number;
-    });
+    flat.push({ ...p, label: pageLabel(p.pagePath), depth });
     const children = (p as AdminPage & { children?: AdminPage[] }).children;
     if (children) {
       flat.push(...flattenPages(children, depth + 1));
@@ -33,45 +36,41 @@ function flattenPages(
   return flat;
 }
 
-function buildPageTree(pages: AdminPage[]): (AdminPage & { children?: AdminPage[] })[] {
+/** Build a nested page tree from a flat list — immutable, no mutation of input objects. */
+function buildPageTree(
+  pages: AdminPage[],
+): (AdminPage & { children?: AdminPage[] })[] {
   const sorted = [...pages].sort((a, b) =>
     a.pagePath.localeCompare(b.pagePath),
   );
   const tree: (AdminPage & { children?: AdminPage[] })[] = [];
+  const map = new Map<string, AdminPage & { children?: AdminPage[] }>();
 
   for (const page of sorted) {
+    // Shallow-clone so we never mutate the original page object from props
+    const node = { ...page, children: undefined } as AdminPage & {
+      children?: AdminPage[];
+    };
+    map.set(node.pagePath, node);
+
     const parts = page.pagePath.split("/").filter(Boolean);
     if (parts.length === 0) {
-      tree.push(page);
+      tree.push(node);
       continue;
     }
 
     const parentPath = "/" + parts.slice(0, -1).join("/");
-    const parent = findPage(tree, parentPath);
+    const parent = map.get(parentPath);
 
     if (parent) {
       if (!parent.children) parent.children = [];
-      parent.children.push(page);
+      parent.children.push(node);
     } else {
-      tree.push(page);
+      tree.push(node);
     }
   }
 
   return tree;
-}
-
-function findPage(
-  pages: (AdminPage & { children?: AdminPage[] })[],
-  pagePath: string,
-): (AdminPage & { children?: AdminPage[] }) | null {
-  for (const p of pages) {
-    if (p.pagePath === pagePath) return p;
-    if (p.children) {
-      const found = findPage(p.children, pagePath);
-      if (found) return found;
-    }
-  }
-  return null;
 }
 
 function fieldLabel(name: string): string {
@@ -230,16 +229,16 @@ function ArrayFieldEditor({
                     )}
                     {(fType === "image" || fType === "file") && (
                       <div className="space-y-1">
-                        {fType === "image" && val && (
+                        {fType === "image" && typeof val === "string" && val && (
                           <img
-                            src={String(val)}
+                            src={val}
                             alt={fKey}
                             className="h-16 w-16 rounded-md border border-slate-200 object-cover"
                           />
                         )}
                         <input
                           type="text"
-                          value={val as string}
+                          value={typeof val === "string" ? val : ""}
                           onChange={(e) =>
                             updateObjectField(idx, fKey, e.target.value)
                           }
@@ -327,9 +326,9 @@ function PageEditForm({
           {/* Image field */}
           {field.type === "image" && (
             <div className="space-y-3">
-              {field.value && (
+              {typeof field.value === "string" && field.value && (
                 <img
-                  src={String(field.value)}
+                  src={field.value}
                   alt={field.name}
                   className="h-32 w-32 rounded-lg border border-slate-200 object-cover"
                 />
@@ -337,7 +336,7 @@ function PageEditForm({
               <input
                 name={`${field.name}_url`}
                 type="text"
-                defaultValue={String(field.value ?? "")}
+                defaultValue={typeof field.value === "string" ? field.value : ""}
                 placeholder="/img/photo.jpg or https://…"
                 className="block w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm text-slate-900 shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
               />
@@ -353,19 +352,19 @@ function PageEditForm({
           {/* File field */}
           {field.type === "file" && (
             <div className="space-y-3">
-              {field.value && (
+              {typeof field.value === "string" && field.value && (
                 <a
-                  href={String(field.value)}
+                  href={field.value}
                   target="_blank"
                   className="inline-block text-sm text-indigo-600 underline"
                 >
-                  Current file: {String(field.value).split("/").pop()}
+                  Current file: {field.value.split("/").pop()}
                 </a>
               )}
               <input
                 name={`${field.name}_url`}
                 type="text"
-                defaultValue={String(field.value ?? "")}
+                defaultValue={typeof field.value === "string" ? field.value : ""}
                 placeholder="/files/doc.pdf or https://…"
                 className="block w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm text-slate-900 shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
               />
