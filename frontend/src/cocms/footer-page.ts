@@ -7,7 +7,7 @@ import { array } from "./fields";
 export default {
   pagePath: "/__footer",
 
-  footerText: "Powered by CoCMS — the co-located CMS for Next.js.",
+  footerText: "Powered by CoCMS.",
 
   footerLinks: array([
     { label: "GitHub", href: "https://github.com" },

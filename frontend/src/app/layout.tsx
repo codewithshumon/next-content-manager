@@ -18,9 +18,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CoCMS — Co-located CMS Demo",
+  title: "CoCMS Demo",
   description:
-    "A demo website powered by CoCMS — a co-located content-editing layer for Next.js.",
+    "A demo website powered by CoCMS — a content-editing layer for Next.js.",
 };
 
 interface NavLink {
