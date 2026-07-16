@@ -13,6 +13,13 @@ export async function register() {
     const productsSchema = (await import("@/cocms/products-page")).default;
     const servicesSchema = (await import("@/cocms/services-page")).default;
 
+    const webDev = (await import("@/cocms/service-web-dev")).default;
+    const uiUx = (await import("@/cocms/service-ui-ux")).default;
+    const apiDev = (await import("@/cocms/service-api-dev")).default;
+    const cloudInfra = (await import("@/cocms/service-cloud-infra")).default;
+    const consulting = (await import("@/cocms/service-consulting")).default;
+    const maintenance = (await import("@/cocms/service-maintenance")).default;
+
     await syncSchemas([
       homeSchema,
       aboutSchema,
@@ -20,6 +27,12 @@ export async function register() {
       footerSchema,
       productsSchema,
       servicesSchema,
+      webDev,
+      uiUx,
+      apiDev,
+      cloudInfra,
+      consulting,
+      maintenance,
     ]);
   }
 }

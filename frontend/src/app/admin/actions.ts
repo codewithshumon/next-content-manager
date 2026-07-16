@@ -12,7 +12,7 @@ import type { AdminField } from "@/cocms/client";
 
 function getTableName(pagePath: string): string {
   if (pagePath === "/") return "cocms_home";
-  return "cocms" + pagePath.replace(/\//g, "_");
+  return "cocms" + pagePath.replace(/[\/\-]/g, "_");
 }
 
 // ── auth ─────────────────────────────────────────────────────────────

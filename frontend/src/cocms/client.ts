@@ -5,7 +5,7 @@ import type { PageSchema, ResolvedContent, ArrayItemSchema } from "./types";
 
 export function getTableName(pagePath: string): string {
   if (pagePath === "/") return "cocms_home";
-  return "cocms" + pagePath.replace(/\//g, "_");
+  return "cocms" + pagePath.replace(/[\/\-]/g, "_");
 }
 
 export function getDefaultValue(value: unknown): unknown {
