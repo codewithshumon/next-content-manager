@@ -49,21 +49,17 @@ export async function getContent<T extends PageSchema>(
 
     const row = result.rows[0];
 
-    // pg lowercases all column names in results. Build a case-insensitive
-    // lookup map so camelCase schema keys still resolve correctly.
+    // pg can return column names in varying case — build a case-insensitive
+    // lookup map so camelCase schema keys always resolve correctly.
     const rowMap: Record<string, unknown> = Object.fromEntries(
       Object.entries(row).map(([k, v]) => [k.toLowerCase(), v]),
     );
-
-    console.log("[CoCMS] getContent row keys:", Object.keys(row));
-    console.log("[CoCMS] getContent schema keys:", Object.keys(schema).filter(k => k !== 'pagePath'));
 
     const content: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(schema)) {
       if (key === "pagePath") continue;
       const dbValue = rowMap[key.toLowerCase()];
-      console.log(`[CoCMS] getContent field "${key}": rowValue=`, dbValue, `default=`, getDefaultValue(value));
-      // JSONB columns are auto-parsed by pg; NULL falls back to schema default
+      // NULL / missing columns fall back to schema defaults
       content[key] = dbValue ?? getDefaultValue(value);
     }
 
@@ -108,9 +104,10 @@ export async function getAllPages(): Promise<AdminPage[]> {
         `SELECT field_name, field_type, field_meta
          FROM cocms_fields
          WHERE page_path = $1
-         ORDER BY field_name`,
+         ORDER BY sort_order`,
         [page_path],
       );
+
 
       // Get current values
       let rawRow: Record<string, unknown> | null = null;

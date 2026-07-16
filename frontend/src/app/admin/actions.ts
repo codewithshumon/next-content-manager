@@ -24,10 +24,31 @@ export async function login(
   const username = formData.get("username") as string;
   const password = formData.get("password") as string;
 
+  let authenticated = false;
+
+  // Try DB users table first
+  try {
+    const result = await pool.query(
+      `SELECT password FROM cocms_users WHERE username = $1`,
+      [username],
+    );
+    if (result.rows.length > 0 && result.rows[0].password === password) {
+      authenticated = true;
+    }
+  } catch {
+    // users table not available — fall back to env vars
+  }
+
+  // Fall back to env vars (for first boot before sync)
   if (
+    !authenticated &&
     username === process.env.COCMS_ADMIN_USER &&
     password === process.env.COCMS_ADMIN_PASSWORD
   ) {
+    authenticated = true;
+  }
+
+  if (authenticated) {
     const cookieStore = await cookies();
     cookieStore.set("cocms_token", "authenticated", {
       httpOnly: true,
@@ -125,11 +146,7 @@ export async function updatePage(
       WHERE page_path = $${paramIndex}
     `;
 
-    console.log("[CoCMS] UPDATE query:", updateQuery);
-    console.log("[CoCMS] UPDATE values:", [...queryValues, pagePath]);
-
-    const updateResult = await pool.query(updateQuery, [...queryValues, pagePath]);
-    console.log("[CoCMS] UPDATE rowCount:", updateResult.rowCount);
+    await pool.query(updateQuery, [...queryValues, pagePath]);
 
     revalidatePath(pagePath);
     revalidatePath("/admin");

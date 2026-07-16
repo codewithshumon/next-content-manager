@@ -8,14 +8,16 @@ export async function register() {
 
     const homeSchema = (await import("@/cocms/home-page")).default;
     const aboutSchema = (await import("@/cocms/about-page")).default;
-    const siteConfig = (await import("@/cocms/site-config")).default;
+    const headerSchema = (await import("@/cocms/header-page")).default;
+    const footerSchema = (await import("@/cocms/footer-page")).default;
     const productsSchema = (await import("@/cocms/products-page")).default;
     const servicesSchema = (await import("@/cocms/services-page")).default;
 
     await syncSchemas([
       homeSchema,
       aboutSchema,
-      siteConfig,
+      headerSchema,
+      footerSchema,
       productsSchema,
       servicesSchema,
     ]);

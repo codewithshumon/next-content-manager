@@ -86,6 +86,41 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* ── Feature Section (image left, content right) ── */}
+      <section className="bg-white py-20 sm:py-28">
+        <div className="mx-auto max-w-7xl px-6 lg:px-8">
+          <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+            {/* Left: image */}
+            <div className="relative">
+              <div className="absolute -inset-4 rounded-2xl bg-linear-to-br from-indigo-400/20 to-purple-400/20 blur-xl" />
+              <img
+                src={content.featureImage}
+                alt="Feature illustration"
+                className="relative w-full rounded-2xl border border-slate-200 shadow-lg"
+              />
+            </div>
+
+            {/* Right: content */}
+            <div>
+              <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+                {content.featureTitle}
+              </h2>
+              <p className="mt-6 text-lg leading-8 text-slate-600">
+                {content.featureDescription}
+              </p>
+              <div className="mt-8">
+                <a
+                  href="/services"
+                  className="inline-flex rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-indigo-500"
+                >
+                  {content.featureCtaText}
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
   );
 }

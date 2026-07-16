@@ -74,7 +74,28 @@ export function inferItemSchema(defaultValue: unknown[]): ArrayItemSchema {
  * other schemas from syncing.
  */
 export async function syncSchemas(schemas: PageSchema[]): Promise<void> {
-  // Ensure the registry table exists (with optional field_meta column)
+  // ── Users table for admin authentication ──
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS cocms_users (
+      id           SERIAL PRIMARY KEY,
+      username     TEXT UNIQUE NOT NULL,
+      password     TEXT NOT NULL,
+      display_name TEXT,
+      created_at   TIMESTAMPTZ DEFAULT now()
+    )
+  `);
+
+  // Seed default admin user (demo-only, plain-text password)
+  await pool.query(
+    `INSERT INTO cocms_users (username, password, display_name)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (username) DO NOTHING`,
+    [process.env.COCMS_ADMIN_USER || "admin",
+     process.env.COCMS_ADMIN_PASSWORD || "admin123",
+     "Admin User"],
+  );
+
+  // ── Registry table ──
   await pool.query(`
     CREATE TABLE IF NOT EXISTS cocms_fields (
       page_path  TEXT NOT NULL,
@@ -88,6 +109,12 @@ export async function syncSchemas(schemas: PageSchema[]): Promise<void> {
   await pool.query(`
     ALTER TABLE cocms_fields
     ADD COLUMN IF NOT EXISTS field_meta JSONB
+  `);
+
+  // Add sort_order column if it doesn't exist yet
+  await pool.query(`
+    ALTER TABLE cocms_fields
+    ADD COLUMN IF NOT EXISTS sort_order INTEGER
   `);
 
   for (const schema of schemas) {
@@ -106,6 +133,7 @@ export async function syncSchemas(schemas: PageSchema[]): Promise<void> {
       const columns = Object.keys(schema).filter((k) => k !== "pagePath");
 
       // 2. Add any missing columns
+      let sortIdx = 0;
       for (const col of columns) {
         const fieldType = getFieldType(schema[col]);
         const columnType = getColumnType(fieldType);
@@ -115,6 +143,20 @@ export async function syncSchemas(schemas: PageSchema[]): Promise<void> {
           ADD COLUMN IF NOT EXISTS "${col}" ${columnType}
         `);
 
+        // Backfill default value for existing rows where the new column is NULL
+        const defVal = getDefaultValue(schema[col]);
+        if (fieldType === "array") {
+          await pool.query(
+            `UPDATE ${tableName} SET "${col}" = $1::jsonb WHERE page_path = $2 AND "${col}" IS NULL`,
+            [JSON.stringify(defVal), schema.pagePath],
+          );
+        } else {
+          await pool.query(
+            `UPDATE ${tableName} SET "${col}" = $1 WHERE page_path = $2 AND "${col}" IS NULL`,
+            [defVal, schema.pagePath],
+          );
+        }
+
         // Build field_meta for array fields
         let fieldMeta: unknown = null;
         if (fieldType === "array") {
@@ -122,14 +164,15 @@ export async function syncSchemas(schemas: PageSchema[]): Promise<void> {
           fieldMeta = inferItemSchema(arrVal.defaultValue);
         }
 
-        // 3. Upsert registry row (with field_meta)
+        // 3. Upsert registry row (with field_meta and sort_order)
         await pool.query(
-          `INSERT INTO cocms_fields (page_path, field_name, field_type, field_meta)
-           VALUES ($1, $2, $3, $4)
+          `INSERT INTO cocms_fields (page_path, field_name, field_type, field_meta, sort_order)
+           VALUES ($1, $2, $3, $4, $5)
            ON CONFLICT (page_path, field_name)
-           DO UPDATE SET field_type = $3, field_meta = $4`,
-          [schema.pagePath, col, fieldType, fieldMeta ? JSON.stringify(fieldMeta) : null],
+           DO UPDATE SET field_type = $3, field_meta = $4, sort_order = $5`,
+          [schema.pagePath, col, fieldType, fieldMeta ? JSON.stringify(fieldMeta) : null, sortIdx],
         );
+        sortIdx++;
       }
 
       // 4. Insert default row if no row exists for this pagePath
