@@ -207,5 +207,18 @@ export async function syncSchemas(schemas: PageSchema[]): Promise<void> {
     }
   }
 
+  // Clean up registry entries for schemas that no longer exist
+  const activePaths = schemas.map((s) => s.pagePath);
+  if (activePaths.length > 0) {
+    const placeholders = activePaths.map((_, i) => `$${i + 1}`).join(", ");
+    const result = await pool.query(
+      `DELETE FROM cocms_fields WHERE page_path NOT IN (${placeholders})`,
+      activePaths,
+    );
+    if (result.rowCount && result.rowCount > 0) {
+      console.log(`[CoCMS] Cleaned up ${result.rowCount} orphaned registry row(s)`);
+    }
+  }
+
   console.log(`[CoCMS] Sync complete — ${schemas.length} schema(s) processed`);
 }
