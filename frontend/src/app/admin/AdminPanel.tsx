@@ -582,7 +582,7 @@ export default function AdminPanel({ pages }: { pages: AdminPage[] }) {
 
         {/* ── Main content ── */}
         <main className="flex-1 overflow-y-auto p-8">
-          <div className="mx-auto max-w-2xl">
+          <div className="mx-auto w-full px-4">
             <div className="mb-8">
               <h2 className="text-xl font-bold text-slate-900">
                 {activePage
