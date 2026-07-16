@@ -48,12 +48,23 @@ export async function getContent<T extends PageSchema>(
     }
 
     const row = result.rows[0];
-    const content: Record<string, unknown> = {};
 
+    // pg lowercases all column names in results. Build a case-insensitive
+    // lookup map so camelCase schema keys still resolve correctly.
+    const rowMap: Record<string, unknown> = Object.fromEntries(
+      Object.entries(row).map(([k, v]) => [k.toLowerCase(), v]),
+    );
+
+    console.log("[CoCMS] getContent row keys:", Object.keys(row));
+    console.log("[CoCMS] getContent schema keys:", Object.keys(schema).filter(k => k !== 'pagePath'));
+
+    const content: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(schema)) {
       if (key === "pagePath") continue;
+      const dbValue = rowMap[key.toLowerCase()];
+      console.log(`[CoCMS] getContent field "${key}": rowValue=`, dbValue, `default=`, getDefaultValue(value));
       // JSONB columns are auto-parsed by pg; NULL falls back to schema default
-      content[key] = row[key] ?? getDefaultValue(value);
+      content[key] = dbValue ?? getDefaultValue(value);
     }
 
     return content as ResolvedContent<T>;
@@ -102,16 +113,22 @@ export async function getAllPages(): Promise<AdminPage[]> {
       );
 
       // Get current values
-      let row: Record<string, unknown> = {};
+      let rawRow: Record<string, unknown> | null = null;
       try {
         const rowResult = await pool.query(
           `SELECT * FROM ${tableName} WHERE page_path = $1`,
           [page_path],
         );
-        if (rowResult.rows.length > 0) row = rowResult.rows[0];
+        if (rowResult.rows.length > 0) rawRow = rowResult.rows[0];
       } catch {
         // Table might not exist yet
       }
+
+      const rowMap: Record<string, unknown> = rawRow
+        ? Object.fromEntries(
+            Object.entries(rawRow).map(([k, v]) => [k.toLowerCase(), v]),
+          )
+        : {};
 
       const fields: AdminField[] = fieldsResult.rows.map(
         (f: {
@@ -121,7 +138,7 @@ export async function getAllPages(): Promise<AdminPage[]> {
         }) => ({
           name: f.field_name,
           type: f.field_type,
-          value: row[f.field_name] ?? "",
+          value: rowMap[f.field_name.toLowerCase()] ?? "",
           fieldMeta: (f.field_meta as ArrayItemSchema) ?? null,
         }),
       );

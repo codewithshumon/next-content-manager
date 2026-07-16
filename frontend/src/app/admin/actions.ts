@@ -125,7 +125,11 @@ export async function updatePage(
       WHERE page_path = $${paramIndex}
     `;
 
-    await pool.query(updateQuery, [...queryValues, pagePath]);
+    console.log("[CoCMS] UPDATE query:", updateQuery);
+    console.log("[CoCMS] UPDATE values:", [...queryValues, pagePath]);
+
+    const updateResult = await pool.query(updateQuery, [...queryValues, pagePath]);
+    console.log("[CoCMS] UPDATE rowCount:", updateResult.rowCount);
 
     revalidatePath(pagePath);
     revalidatePath("/admin");
