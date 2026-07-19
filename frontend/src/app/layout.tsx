@@ -33,6 +33,11 @@ interface FooterLink {
   href: string;
 }
 
+interface ServiceLink {
+  label: string;
+  href: string;
+}
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -46,6 +51,7 @@ export default async function RootLayout({
   let headerData = {
     siteName: "CoCMS",
     navLinks: [] as NavLink[],
+    serviceLinks: [] as ServiceLink[],
   };
   let footerData = {
     footerText: "",
@@ -58,6 +64,7 @@ export default async function RootLayout({
       headerData = {
         siteName: (header.siteName as string) || "CoCMS",
         navLinks: (header.navLinks as NavLink[]) || [],
+        serviceLinks: (header.serviceLinks as ServiceLink[]) || [],
       };
     } catch { /* use defaults */ }
 
@@ -90,15 +97,44 @@ export default async function RootLayout({
                 </Link>
 
                 <div className="flex items-center gap-x-1">
-                  {headerData.navLinks.map((link) => (
-                    <Link
-                      key={link.href}
-                      href={link.href}
-                      className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
-                    >
-                      {link.label}
-                    </Link>
-                  ))}
+                  {headerData.navLinks.map((link) => {
+                    // Services link renders as a CSS dropdown
+                    if (link.label === "Services" && headerData.serviceLinks.length > 0) {
+                      return (
+                        <div key={link.href} className="group relative">
+                          <Link
+                            href={link.href}
+                            className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 inline-flex items-center gap-x-1"
+                          >
+                            {link.label}
+                            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </Link>
+                          <div className="absolute left-0 top-full z-50 hidden min-w-55 rounded-xl border border-slate-200 bg-white py-1 shadow-lg group-hover:block">
+                            {headerData.serviceLinks.map((sl) => (
+                              <Link
+                                key={sl.href}
+                                href={sl.href}
+                                className="block px-4 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                              >
+                                {sl.label}
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                      >
+                        {link.label}
+                      </Link>
+                    );
+                  })}
                   <Link
                     href="/admin"
                     className="ml-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-500"
