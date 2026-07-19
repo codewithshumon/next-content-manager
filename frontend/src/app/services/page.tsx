@@ -1,5 +1,13 @@
+import Link from "next/link";
 import { getContent } from "@/cocms/client";
 import schema from "@/cocms/services-page";
+
+function serviceSlug(name: string): string {
+  return "/services/" + name.toLowerCase()
+    .replace(/\//g, "-")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-");
+}
 
 export default async function ServicesPage() {
   const content = await getContent(schema);
@@ -7,6 +15,7 @@ export default async function ServicesPage() {
     name: string;
     description: string;
     icon: string;
+    href?: string;
   }>;
 
   return (
@@ -49,9 +58,12 @@ export default async function ServicesPage() {
 
                 {/* Learn more link */}
                 <div className="mt-5">
-                  <span className="text-sm font-medium text-indigo-600 transition-colors group-hover:text-indigo-500">
+                  <Link
+                    href={service.href || serviceSlug(service.name)}
+                    className="text-sm font-medium text-indigo-600 transition-colors hover:text-indigo-500"
+                  >
                     Learn more →
-                  </span>
+                  </Link>
                 </div>
               </div>
             ))}

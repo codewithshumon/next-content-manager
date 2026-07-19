@@ -135,12 +135,6 @@ export default async function RootLayout({
                       </Link>
                     );
                   })}
-                  <Link
-                    href="/admin"
-                    className="ml-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-500"
-                  >
-                    Admin
-                  </Link>
                 </div>
               </nav>
             </header>
