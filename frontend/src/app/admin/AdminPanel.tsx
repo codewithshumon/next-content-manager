@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { updatePage, logout } from "./actions";
 import type { AdminField, AdminPage } from "@/cocms/client";
 import type { ArrayItemSchema } from "@/cocms/types";
+import SettingsPanel, { type AdminUser } from "./SettingsPanel";
 
 // ── helpers ───────────────────────────────────────────────────────────
 
@@ -24,14 +25,22 @@ function fieldLabel(name: string): string {
     .trim();
 }
 
-interface FlatTab {
+interface SidebarPage {
+  type: "page";
   pagePath: string;
   label: string;
-  depth: number;
-  hasChildren: boolean;
 }
 
-function buildSidebarTabs(pages: AdminPage[]): FlatTab[] {
+interface SidebarGroup {
+  type: "group";
+  pagePath: string;
+  label: string;
+  children: SidebarPage[];
+}
+
+type SidebarNode = SidebarPage | SidebarGroup;
+
+function buildSidebarTree(pages: AdminPage[]): SidebarNode[] {
   const sorted = [...pages].sort((a, b) =>
     a.pagePath.localeCompare(b.pagePath),
   );
@@ -45,30 +54,35 @@ function buildSidebarTabs(pages: AdminPage[]): FlatTab[] {
     childrenMap.get(parentPath)!.push(page);
   }
 
-  const tabs: FlatTab[] = [];
+  const nodes: SidebarNode[] = [];
   for (const page of sorted) {
     const parts = page.pagePath.split("/").filter(Boolean);
-    if (parts.length > 1) continue;
+    if (parts.length > 1) continue; // nested — owned by its parent group
     const children = childrenMap.get(page.pagePath);
-    tabs.push({
-      pagePath: page.pagePath,
-      label: pageLabel(page.pagePath),
-      depth: 0,
-      hasChildren: !!children && children.length > 0,
-    });
-    if (children) {
-      tabs.push({ pagePath: page.pagePath, label: "Main", depth: 1, hasChildren: false });
-      for (const child of children) {
-        tabs.push({
-          pagePath: child.pagePath,
-          label: pageLabel(child.pagePath),
-          depth: 1,
-          hasChildren: false,
-        });
-      }
+
+    if (children && children.length > 0) {
+      nodes.push({
+        type: "group",
+        pagePath: page.pagePath,
+        label: pageLabel(page.pagePath),
+        children: [
+          { type: "page", pagePath: page.pagePath, label: "Main" },
+          ...children.map<SidebarPage>((c) => ({
+            type: "page",
+            pagePath: c.pagePath,
+            label: pageLabel(c.pagePath),
+          })),
+        ],
+      });
+    } else {
+      nodes.push({
+        type: "page",
+        pagePath: page.pagePath,
+        label: pageLabel(page.pagePath),
+      });
     }
   }
-  return tabs;
+  return nodes;
 }
 
 function newItemDefault(schema: ArrayItemSchema): unknown {
@@ -333,55 +347,69 @@ function AdminHeader({
   dirty,
   pending,
   onCancel,
+  onOpenSettings,
+  onLogoClick,
 }: {
   pagePath: string;
   dirty: boolean;
   pending: boolean;
   onCancel: () => void;
+  onOpenSettings: () => void;
+  onLogoClick: () => void;
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const router = useRouter();
   const canSave = dirty && !pending;
+  const isEditor = pagePath !== "settings";
 
   return (
     <header className="sticky top-0 z-40 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-2.5">
       <div className="flex items-center gap-x-3">
-        <span className="text-lg font-bold tracking-tight text-slate-900">
+        <button
+          type="button"
+          onClick={onLogoClick}
+          className="text-lg font-bold tracking-tight text-slate-900"
+        >
           <span className="text-indigo-600">Co</span>CMS
+        </button>
+        <span className="hidden text-sm text-slate-400 sm:inline">
+          {isEditor ? "Admin" : "Settings"}
         </span>
-        <span className="hidden text-sm text-slate-400 sm:inline">Admin</span>
       </div>
 
       <div className="flex items-center gap-x-2">
-        {/* Save — disabled (dim) until the form is dirty */}
-        <button
-          type="submit"
-          form="cocms-edit-form"
-          disabled={!canSave}
-          className={`rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/20 ${
-            canSave
-              ? "bg-indigo-600 text-white hover:bg-indigo-500"
-              : "cursor-not-allowed bg-slate-200 text-slate-400"
-          }`}
-        >
-          {pending ? "Saving…" : "Save Changes"}
-        </button>
+        {isEditor && (
+          <>
+            {/* Save — disabled (dim) until the form is dirty */}
+            <button
+              type="submit"
+              form="cocms-edit-form"
+              disabled={!canSave}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/20 ${
+                canSave
+                  ? "bg-indigo-600 text-white hover:bg-indigo-500"
+                  : "cursor-not-allowed bg-slate-200 text-slate-400"
+              }`}
+            >
+              {pending ? "Saving…" : "Save Changes"}
+            </button>
 
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
-        >
-          Cancel
-        </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
+            >
+              Cancel
+            </button>
 
-        <button
-          type="button"
-          onClick={() => window.open(pagePath === "/__header" || pagePath === "/__footer" ? "/" : pagePath, "_blank")}
-          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
-        >
-          Preview
-        </button>
+            <button
+              type="button"
+              onClick={() => window.open(pagePath === "/__header" || pagePath === "/__footer" ? "/" : pagePath, "_blank")}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
+            >
+              Preview
+            </button>
+          </>
+        )}
 
         <div className="relative ml-2">
           <button
@@ -400,7 +428,7 @@ function AdminHeader({
                   type="button"
                   onClick={() => {
                     setDropdownOpen(false);
-                    router.push("/admin/settings");
+                    onOpenSettings();
                   }}
                   className="block w-full px-4 py-2 text-left text-sm text-slate-600 transition-colors hover:bg-slate-50"
                 >
@@ -475,22 +503,57 @@ function PageEditForm({
 export default function AdminPanel({
   pages,
   initialPage,
+  user,
 }: {
   pages: AdminPage[];
   initialPage?: string;
+  user: AdminUser | null;
 }) {
   const router = useRouter();
-  const tabs = buildSidebarTabs(pages);
+  const nodes = buildSidebarTree(pages);
+
+  // First selectable page path (for the initial fallback).
+  const firstPath = useMemo(() => {
+    for (const n of nodes) {
+      if (n.type === "page") return n.pagePath;
+      if (n.children.length > 0) return n.children[0].pagePath;
+    }
+    return "";
+  }, [nodes]);
+
+  // "settings" is a special pseudo-tab; everything else is a real pagePath.
+  const isValidInitial = (p?: string) =>
+    !!p && (p === "settings" || pages.some((pg) => pg.pagePath === p));
 
   // Active page is persisted in the URL (?p=...) so a refresh keeps context.
   const [activePath, setActivePath] = useState(
-    initialPage && pages.some((p) => p.pagePath === initialPage)
-      ? initialPage
-      : tabs[0]?.pagePath ?? "",
+    isValidInitial(initialPage) ? (initialPage as string) : firstPath,
   );
   const [savedKey, setSavedKey] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [pending, setPending] = useState(false);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  const toggleGroup = useCallback((path: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
+
+  // Parent group of the active page — always shown expanded (derived, no effect).
+  const activeParent = useMemo(() => {
+    const parts = activePath.split("/").filter(Boolean);
+    if (parts.length > 1) return "/" + parts.slice(0, -1).join("/");
+    return null;
+  }, [activePath]);
+
+  const isGroupCollapsed = useCallback(
+    (path: string) => collapsed.has(path) && path !== activeParent,
+    [collapsed, activeParent],
+  );
 
   // Stable callbacks
   const markDirty = useCallback(() => setDirty(true), []);
@@ -500,6 +563,8 @@ export default function AdminPanel({
     () => pages.find((p) => p.pagePath === activePath),
     [pages, activePath],
   );
+
+  const isSettings = activePath === "settings";
 
   const switchPage = useCallback(
     (path: string) => {
@@ -533,40 +598,81 @@ export default function AdminPanel({
         dirty={dirty}
         pending={pending}
         onCancel={handleCancel}
+        onOpenSettings={() => switchPage("settings")}
+        onLogoClick={() => switchPage(firstPath)}
       />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <aside className="w-60 shrink-0 overflow-y-auto border-r border-slate-200 bg-slate-50 p-4">
           <nav className="space-y-0.5">
-            {tabs.map((tab) => {
-              const isGroup = tab.hasChildren;
-              const isActive = activePath === tab.pagePath && !isGroup;
-
-              if (isGroup) {
+            {nodes.map((node) => {
+              // Standalone top-level page (e.g. Home, Contact)
+              if (node.type === "page") {
+                const isActive = activePath === node.pagePath;
                 return (
-                  <div key={`group-${tab.pagePath}`} className="pt-2 first:pt-0">
-                    <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      {tab.label} Pages
-                    </div>
-                  </div>
+                  <button
+                    key={node.pagePath}
+                    onClick={() => switchPage(node.pagePath)}
+                    className={`block w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors ${
+                      isActive
+                        ? "bg-indigo-100 text-indigo-700"
+                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    }`}
+                  >
+                    {node.label}
+                  </button>
                 );
               }
 
+              // Collapsible group
+              const groupCollapsed = isGroupCollapsed(node.pagePath);
               return (
-                <button
-                  key={tab.pagePath + (tab.label === "Main" ? "-main" : "")}
-                  onClick={() => switchPage(tab.pagePath)}
-                  className={`block w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-indigo-100 text-indigo-700"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                  }`}
-                  style={{ paddingLeft: `${12 + tab.depth * 16}px` }}
-                >
-                  {tab.depth > 0 && <span className="mr-1 text-slate-300">└</span>}
-                  {tab.label}
-                </button>
+                <div key={`group-${node.pagePath}`} className="mt-2 first:mt-0">
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(node.pagePath)}
+                    className="flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    <span>{node.label} Pages</span>
+                    <svg
+                      className={`h-3.5 w-3.5 transition-transform ${groupCollapsed ? "" : "rotate-90"}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2.5}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+
+                  {!groupCollapsed && (
+                    <div className="mt-0.5 space-y-0.5">
+                      {node.children.map((child) => {
+                        // The "Main" pseudo-child represents the parent page itself.
+                        const isActive =
+                          child.label === "Main"
+                            ? activePath === node.pagePath
+                            : activePath === child.pagePath;
+                        return (
+                          <button
+                            key={child.pagePath + (child.label === "Main" ? "-main" : "")}
+                            onClick={() => switchPage(child.pagePath)}
+                            className={`block w-full rounded-lg py-2 pr-3 text-left text-sm font-medium transition-colors ${
+                              isActive
+                                ? "bg-indigo-100 text-indigo-700"
+                                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                            }`}
+                            style={{ paddingLeft: `28px` }}
+                          >
+                            <span className="mr-1 text-slate-300">└</span>
+                            {child.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </nav>
@@ -575,33 +681,39 @@ export default function AdminPanel({
         {/* Main content */}
         <main className="flex-1 overflow-y-auto p-8">
           <div className="mx-auto w-full px-4">
-            <div className="mb-8">
-              <h2 className="text-xl font-bold text-slate-900">
-                {activePage ? pageLabel(activePage.pagePath) : "Select a page"}
-              </h2>
-              {activePage && (
-                <p className="mt-1 text-sm text-slate-500">{activePage.pagePath}</p>
-              )}
-            </div>
+            {isSettings ? (
+              <SettingsPanel user={user} onOpenTab={switchPage} />
+            ) : (
+              <>
+                <div className="mb-8">
+                  <h2 className="text-xl font-bold text-slate-900">
+                    {activePage ? pageLabel(activePage.pagePath) : "Select a page"}
+                  </h2>
+                  {activePage && (
+                    <p className="mt-1 text-sm text-slate-500">{activePage.pagePath}</p>
+                  )}
+                </div>
 
-            {activePage && (
-              <PageEditForm
-                key={`${activePage.pagePath}-${savedKey}`}
-                page={activePage}
-                onDirty={markDirty}
-                onPendingChange={reportPending}
-                onSaved={handleSaved}
-              />
-            )}
+                {activePage && (
+                  <PageEditForm
+                    key={`${activePage.pagePath}-${savedKey}`}
+                    page={activePage}
+                    onDirty={markDirty}
+                    onPendingChange={reportPending}
+                    onSaved={handleSaved}
+                  />
+                )}
 
-            {!activePage && (
-              <p className="text-sm text-slate-400">
-                No pages registered yet. Create a schema file in{" "}
-                <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-700">
-                  src/cocms/
-                </code>{" "}
-                and restart the server.
-              </p>
+                {!activePage && (
+                  <p className="text-sm text-slate-400">
+                    No pages registered yet. Create a schema file in{" "}
+                    <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-700">
+                      src/cocms/
+                    </code>{" "}
+                    and restart the server.
+                  </p>
+                )}
+              </>
             )}
           </div>
         </main>

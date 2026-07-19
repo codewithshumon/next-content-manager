@@ -1,11 +1,9 @@
 "use client";
 
 import { useState, useActionState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { changePassword } from "./actions";
 
-interface UserRow {
+export interface AdminUser {
   id: number;
   username: string;
   display_name: string | null;
@@ -62,45 +60,56 @@ function PasswordForm() {
         </button>
       </div>
 
-      {state?.error && (
-        <p className="text-sm text-red-600">{state.error}</p>
-      )}
-      {state?.success && (
-        <p className="text-sm text-emerald-600">Password updated.</p>
-      )}
+      {state?.error && <p className="text-sm text-red-600">{state.error}</p>}
+      {state?.success && <p className="text-sm text-emerald-600">Password updated.</p>}
     </form>
   );
 }
 
 // ── Quick-links card ──────────────────────────────────────────────────
 
-function QuickLink({ href, label, description }: { href: string; label: string; description: string }) {
+function QuickLink({
+  onClick,
+  label,
+  description,
+}: {
+  onClick: () => void;
+  label: string;
+  description: string;
+}) {
   return (
-    <Link
-      href={href}
-      className="flex items-start gap-x-4 rounded-xl border border-slate-200 p-5 transition-all hover:border-indigo-200 hover:shadow-sm"
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-start gap-x-4 rounded-xl border border-slate-200 p-5 text-left transition-all hover:border-indigo-200 hover:shadow-sm"
     >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600 text-lg">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-lg text-indigo-600">
         {label === "Header" ? "↑" : "↓"}
       </div>
       <div>
         <p className="font-medium text-slate-900">{label}</p>
         <p className="mt-0.5 text-sm text-slate-500">{description}</p>
       </div>
-    </Link>
+    </button>
   );
 }
 
 // ── Main Panel ────────────────────────────────────────────────────────
 
-export default function SettingsPanel({ user }: { user: UserRow | null }) {
-  const router = useRouter();
-
+export default function SettingsPanel({
+  user,
+  onOpenTab,
+}: {
+  user: AdminUser | null;
+  onOpenTab: (pagePath: string) => void;
+}) {
   return (
-    <div className="mx-auto max-w-2xl space-y-8 p-8">
+    <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
-        <p className="mt-1 text-sm text-slate-500">Manage your admin account and site configuration.</p>
+        <p className="mt-1 text-sm text-slate-500">
+          Manage your admin account and site configuration.
+        </p>
       </div>
 
       {/* ── User Info ── */}
@@ -147,29 +156,21 @@ export default function SettingsPanel({ user }: { user: UserRow | null }) {
         </p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <QuickLink
-            href="/admin"
             label="Header"
             description="Site name, navigation links, and brand logo."
+            onClick={() => onOpenTab("/__header")}
           />
           <QuickLink
-            href="/admin"
             label="Footer"
             description="Footer text and social links."
+            onClick={() => onOpenTab("/__footer")}
           />
         </div>
         <p className="mt-3 text-xs text-slate-400">
-          Tip: Select the <strong>Header</strong> or <strong>Footer</strong> tab in the admin sidebar to edit them.
+          Tip: Select the <strong>Header</strong> or <strong>Footer</strong> tab in the
+          admin sidebar to edit them.
         </p>
       </section>
-
-      {/* ── Back ── */}
-      <button
-        type="button"
-        onClick={() => router.push("/admin")}
-        className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
-      >
-        ← Back to admin
-      </button>
     </div>
   );
 }
